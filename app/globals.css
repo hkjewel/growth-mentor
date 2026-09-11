@@ -1,1 +1,58 @@
 @import "tailwindcss";
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --color-brand-50: #eefbf4;
+  --color-brand-100: #d6f5e3;
+  --color-brand-200: #afe9cb;
+  --color-brand-300: #7ad7ad;
+  --color-brand-400: #43bd89;
+  --color-brand-500: #1fa06d;
+  --color-brand-600: #128157;
+  --color-brand-700: #0f6748;
+  --color-brand-800: #0f523b;
+  --color-brand-900: #0d4332;
+  --color-ink-950: #0b1512;
+}
+
+html,
+body {
+  background: #f6f7f5;
+  color: #17211d;
+}
+
+.focus-ring {
+  @apply outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2;
+}
+
+.input {
+  @apply w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-neutral-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 focus:outline-none disabled:bg-neutral-100;
+}
+
+.label {
+  @apply mb-1 block text-sm font-medium text-neutral-700;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2;
+}
+
+.btn-primary {
+  @apply bg-brand-600 text-white shadow-sm hover:bg-brand-700;
+}
+
+.btn-secondary {
+  @apply border border-neutral-300 bg-white text-neutral-800 shadow-sm hover:bg-neutral-50;
+}
+
+.btn-ghost {
+  @apply text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900;
+}
+
+.btn-danger {
+  @apply text-red-700 hover:bg-red-50;
+}
+
+.card {
+  @apply rounded-2xl border border-neutral-200 bg-white shadow-sm;
+}
