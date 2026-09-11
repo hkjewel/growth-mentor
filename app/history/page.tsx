@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { NudgeBanner } from "@/components/NudgeBanner";
 import Link from "next/link";
 import { listScorecardsWithEntries } from "@/lib/data/scorecards";
 import { currentWeek } from "@/lib/week";
@@ -18,6 +19,7 @@ export default async function HistoryPage() {
 
   return (
     <>
+      <NudgeBanner compact />
       <PageHeader
         title="Scorecard history"
         subtitle="Every weekly review you've done, newest first."

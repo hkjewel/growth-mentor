@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { NudgeBanner } from "@/components/NudgeBanner";
 import Link from "next/link";
 import { listGoals } from "@/lib/data/goals";
 import { listVisions } from "@/lib/data/visions";
@@ -56,6 +57,7 @@ export default async function GoalsPage({
 
   return (
     <>
+      <NudgeBanner compact />
       <PageHeader
         title="Goals"
         subtitle={

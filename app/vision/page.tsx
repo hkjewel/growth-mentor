@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { NudgeBanner } from "@/components/NudgeBanner";
 import { listVisions } from "@/lib/data/visions";
 import { listGoals } from "@/lib/data/goals";
 import { PageHeader, EmptyState } from "@/components/ui";
@@ -14,6 +15,7 @@ export default async function VisionPage() {
 
   return (
     <>
+      <NudgeBanner compact />
       <PageHeader
         title="Your 10-year vision"
         subtitle="The north star every goal and weekly score is measured against. Think 10x, not 10%."

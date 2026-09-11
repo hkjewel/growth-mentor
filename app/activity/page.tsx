@@ -29,6 +29,7 @@ const LABELS: Record<string, string> = {
   "team.joined": "Joined a mentor's team",
   "team.left": "Left a mentor's team",
   "team.student_removed": "Removed a student",
+  "data.exported": "Exported scorecard history (CSV)",
 };
 
 function describe(e: AuditEntry): string | null {

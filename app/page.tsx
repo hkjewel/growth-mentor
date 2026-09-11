@@ -9,6 +9,7 @@ import { CATEGORY_LABELS } from "@/types";
 import { CATEGORY_COLORS, CategoryBadge, PageHeader, ScoreRing, Stat, TrendBadge } from "@/components/ui";
 import { HBar, Sparkbars } from "@/components/Charts";
 import { StartScorecard } from "@/components/StartScorecard";
+import { NudgeBanner } from "@/components/NudgeBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader title="Dashboard" subtitle={`Week of ${formatWeek(weekStart)}`} />
+      <NudgeBanner />
 
       {/* North star */}
       <section className="mb-6 overflow-hidden rounded-2xl bg-ink-950 text-white shadow-sm">
@@ -145,6 +147,12 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <p className="mt-4 text-sm text-neutral-500">No scored weeks yet. Save your first scorecard to see your score and trend here.</p>
+          )}
+          {latest?.ai_summary && latest.ai_summary_review_status === "approved" && (
+            <blockquote className="mt-4 border-l-4 border-brand-400 bg-brand-50/60 px-4 py-3 text-sm text-neutral-700">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-brand-700">Coach&apos;s note</p>
+              {latest.ai_summary}
+            </blockquote>
           )}
         </section>
       </div>

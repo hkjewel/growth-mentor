@@ -13,13 +13,13 @@ The builder and their students — individuals seeking personal growth coaching 
 - **Scorecard Entry** — per-goal weekly progress rating (1–10) with a short note.
 
 ## MVP (v1) — must-haves
-- [ ] Create/edit a 10-year Vision
-- [ ] Create/edit Goals (short/long-term, category, target metric)
-- [ ] Generate a weekly scorecard with one entry per active goal
-- [ ] Rate each goal 1–10 + note; see an overall weekly score
-- [ ] View scorecard history (past weeks)
-- [ ] All CRUD persists to the database; no dead buttons
-- [ ] App renders with seed data for anonymous visitors (no login wall)
+- [x] Create/edit a 10-year Vision
+- [x] Create/edit Goals (short/long-term, category, target metric)
+- [x] Generate a weekly scorecard with one entry per active goal
+- [x] Rate each goal 1–10 + note; see an overall weekly score
+- [x] View scorecard history (past weeks)
+- [x] All CRUD persists to the database; no dead buttons
+- [x] App renders with seed data for anonymous visitors (no login wall)
 
 ## Non-goals (v1)
 - No AI-driven coaching suggestions or nudges

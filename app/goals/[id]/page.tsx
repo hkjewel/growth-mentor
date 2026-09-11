@@ -7,6 +7,8 @@ import { formatWeek } from "@/lib/dates";
 import { CategoryBadge, PageHeader, Stat, TimeframeBadge, scoreColor } from "@/components/ui";
 import { LineChart } from "@/components/Charts";
 import { GoalRow } from "@/components/GoalRow";
+import { PredictionBadge } from "@/components/ProgressPanels";
+import { predictGoal } from "@/lib/insights";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +25,7 @@ export default async function GoalDetailPage({ params }: { params: Promise<{ id:
   const avg = ratings.length ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : null;
   const best = ratings.length ? Math.max(...ratings) : null;
   const last = ratings.length ? ratings[ratings.length - 1] : null;
+  const prediction = predictGoal(ratings);
 
   return (
     <>
@@ -51,10 +54,20 @@ export default async function GoalDetailPage({ params }: { params: Promise<{ id:
         <GoalRow goal={goal} visions={visions} lastRating={last} onDetailPage />
       </ul>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat label="Weeks rated" value={ratings.length} />
         <Stat label="Average" value={<span className={scoreColor(avg)}>{avg == null ? "—" : avg.toFixed(1)}</span>} />
         <Stat label="Best week" value={best == null ? "—" : `${best}/10`} />
+        <Stat
+          label="Prediction"
+          value={<PredictionBadge p={prediction} />}
+          hint={
+            <>
+              {prediction.projected != null && <>Projected {prediction.projected.toFixed(1)} in ~4 wks. </>}
+              {prediction.reason}
+            </>
+          }
+        />
       </div>
 
       <section className="card mt-4 p-5">

@@ -20,6 +20,7 @@ import {
 import { validateRating } from "@/lib/data/entries";
 import { listVisions } from "@/lib/data/visions";
 import { draftWeeklySummary } from "@/lib/ai/summaries";
+import { acceptInvite, createInvite, endMentorship, revokeInvite } from "@/lib/data/team";
 import { currentWeek } from "@/lib/week";
 
 function str(form: FormData, key: string): string {
@@ -193,6 +194,48 @@ export async function reviewSummaryAction(
     await reviewSummary(scorecardId, status, editedText);
     refresh();
     return { ok: true, message: status === "approved" ? "Summary approved." : "Summary rejected." };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// ── Team (mentor ↔ student) ─────────────────────────────────────────────────
+
+export async function createInviteAction(): Promise<ActionResult> {
+  try {
+    const invite = await createInvite();
+    refresh();
+    return { ok: true, message: `New invite code: ${invite.code}` };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function revokeInviteAction(id: string): Promise<ActionResult> {
+  try {
+    await revokeInvite(id);
+    refresh();
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function acceptInviteAction(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  try {
+    const m = await acceptInvite(str(form, "code"));
+    refresh();
+    return { ok: true, message: `You joined ${m.mentor_email ?? "your mentor"}'s team.` };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function endMentorshipAction(id: string): Promise<ActionResult> {
+  try {
+    await endMentorship(id);
+    refresh();
+    return { ok: true };
   } catch (e) {
     return fail(e);
   }

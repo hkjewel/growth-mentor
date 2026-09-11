@@ -61,6 +61,14 @@ export function categorySeries(cards: ScorecardWithEntries[]) {
   });
 }
 
+/** A goal's ratings across scored weeks, oldest first. `cards` may be in any order. */
+export function goalRatings(cards: ScorecardWithEntries[], goalId: string): number[] {
+  return [...cards]
+    .filter((c) => c.overall_score != null)
+    .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date))
+    .flatMap((c) => c.entries.filter((e) => e.goal_id === goalId).map((e) => e.progress_rating));
+}
+
 /**
  * Consecutive scored weeks ending at the current week (or last week, if this
  * week isn't scored yet — the streak is still alive until the week ends).
@@ -106,13 +114,15 @@ export function predictGoal(ratings: number[]): Prediction {
   const num = xs.reduce((s, x, i) => s + (x - mx) * (recent[i] - my), 0);
   const den = xs.reduce((s, x) => s + (x - mx) ** 2, 0);
   const slope = den === 0 ? 0 : num / den;
-  const projected = Math.max(1, Math.min(10, my + slope * (n - mx + 3))); // ~4 weeks out
+  // Shrink the trend when there are few points so 2–3 ratings can't swing the projection wildly.
+  const damped = slope * ((n - 1) / (n + 2));
+  const projected = Math.max(1, Math.min(10, my + damped * (n - 1 - mx + 4))); // ~4 weeks after the last rating
   const avg = round1(my);
   let likelihood: Prediction["likelihood"];
   let reason: string;
   if (projected >= 7 && avg >= 6) {
     likelihood = "on_track";
-    reason = slope > 0.2 ? "Strong and still climbing." : "Consistently strong ratings.";
+    reason = slope > 0.2 ? (avg >= 8 ? "Strong and still climbing." : "Improving steadily.") : "Consistently strong ratings.";
   } else if (projected >= 5) {
     likelihood = "at_risk";
     reason = slope < -0.2 ? "Ratings are slipping — refocus this week." : "Middling progress — needs a push.";
