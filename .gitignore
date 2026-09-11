@@ -11,3 +11,6 @@ npm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 .env*
+
+# local copy of the migration bundle (the source of truth is supabase/migrations/)
+growthmentormigrations00020004.sql
