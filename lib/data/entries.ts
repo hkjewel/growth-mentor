@@ -58,16 +58,18 @@ export async function createEntriesForGoals(scorecardId: string, goals: Goal[]) 
 
 export async function updateEntries(scorecardId: string, updates: EntryUpdate[]) {
   const supabase = await db();
-  for (const u of updates) {
-    check(
-      await supabase
+  const clean = updates.map((u) => ({ ...u, progress_rating: validateRating(u.progress_rating) }));
+  // One request per entry, sent in parallel (PostgREST has no multi-row update by id).
+  const results = await Promise.all(
+    clean.map((u) =>
+      supabase
         .from("scorecard_entries")
-        .update({ progress_rating: validateRating(u.progress_rating), note: u.note?.trim() || null })
+        .update({ progress_rating: u.progress_rating, note: u.note?.trim() || null })
         .eq("id", u.id)
         .eq("scorecard_id", scorecardId),
-      "save rating",
-    );
-  }
+    ),
+  );
+  results.forEach((r) => check(r, "save rating"));
 }
 
 export async function deleteEntry(scorecardId: string, entryId: string) {

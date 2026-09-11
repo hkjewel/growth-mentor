@@ -112,16 +112,16 @@ export async function deleteGoalAction(id: string, backToList = false): Promise<
 // ── Scorecards ─────────────────────────────────────────────────────────────
 
 export async function startScorecardAction(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
-  let id: string;
+  let target: string;
   try {
-    const week = str(form, "week") || (await currentWeek()).weekStart;
-    const card = await startScorecard(week);
-    id = card.id;
+    const { weekStart } = await currentWeek();
+    const card = await startScorecard(str(form, "week") || weekStart);
+    target = card.week_start_date === weekStart ? "/scorecard" : `/scorecard/${card.id}`;
     refresh();
   } catch (e) {
     return fail(e);
   }
-  redirect(`/scorecard/${id}`);
+  redirect(target);
 }
 
 export async function saveScorecardAction(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {

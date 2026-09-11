@@ -96,10 +96,8 @@ export async function startScorecard(date: string): Promise<WeeklyScorecard> {
   if (!isValidIsoDate(date)) throw new DataError("Invalid week.");
   const weekStart = mondayOf(date);
 
-  const existing = await getScorecardByWeek(weekStart);
+  const [existing, goals] = await Promise.all([getScorecardByWeek(weekStart), listGoals({ activeOnly: true })]);
   if (existing) throw new DataError("A scorecard already exists for this week.");
-
-  const goals = await listGoals({ activeOnly: true });
   if (goals.length === 0) throw new DataError("Add goals first to generate a scorecard.");
 
   const supabase = await db();
@@ -131,10 +129,13 @@ export async function addMissingEntries(scorecardId: string): Promise<number> {
   return missing.length;
 }
 
-/** Named tool: compute_weekly_score — calculates + persists overall_score. */
-export async function computeWeeklyScore(scorecardId: string): Promise<number | null> {
-  const entries = await listEntries([scorecardId]);
-  const score = averageRating(entries.map((e) => e.progress_rating));
+/**
+ * Named tool: compute_weekly_score — calculates + persists overall_score.
+ * Pass `ratings` when the caller already knows them to skip re-reading entries.
+ */
+export async function computeWeeklyScore(scorecardId: string, ratings?: number[]): Promise<number | null> {
+  const values = ratings ?? (await listEntries([scorecardId])).map((e) => e.progress_rating);
+  const score = averageRating(values);
   const supabase = await db();
   check(
     await scoped(supabase.from("weekly_scorecards").update({ overall_score: score }).eq("id", scorecardId), await ownerId()),
@@ -154,18 +155,21 @@ export async function saveScorecard(
   const valid = new Set(card.entries.map((e) => e.id));
   if (updates.some((u) => !valid.has(u.id))) throw new DataError("This scorecard changed — refresh and try again.");
   const supabase = await db();
-  await updateEntries(scorecardId, updates);
-  check(
-    await scoped(
-      supabase.from("weekly_scorecards").update({ notes: notes?.trim() || null }).eq("id", scorecardId),
-      await ownerId(),
-    ),
-    "save reflection",
-  );
+  const owner = await ownerId();
+  const [, notesResult] = await Promise.all([
+    updateEntries(scorecardId, updates),
+    scoped(supabase.from("weekly_scorecards").update({ notes: notes?.trim() || null }).eq("id", scorecardId), owner),
+  ]);
+  check(notesResult, "save reflection");
   await logAudit("scorecard.rated", "weekly_scorecards", scorecardId, {
     ratings: updates.map((u) => ({ entry: u.id, rating: u.progress_rating })),
   });
-  return computeWeeklyScore(scorecardId);
+  // Every entry on the card was just rated, so the score comes straight from the submitted ratings.
+  const submitted = new Map(updates.map((u) => [u.id, u.progress_rating]));
+  return computeWeeklyScore(
+    scorecardId,
+    card.entries.map((e) => submitted.get(e.id) ?? e.progress_rating),
+  );
 }
 
 /** Remove one goal from a week's scorecard; re-score if the week was already saved. */

@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import { db, ownerId } from "./db";
 
 export type AuditEntry = {
@@ -13,7 +14,8 @@ export type AuditEntry = {
 
 /**
  * Append-only audit log. Best-effort: a failed log write never blocks the
- * user's action (e.g. if the audit_logs migration hasn't been applied yet).
+ * user's action. The insert runs after the response is sent (next/server
+ * `after`) so logging never adds a database round trip to the user's wait.
  */
 export async function logAudit(
   action: string,
@@ -23,16 +25,24 @@ export async function logAudit(
   actor: "user" | "system" = "user",
 ) {
   try {
-    const supabase = await db();
-    const { error } = await supabase.from("audit_logs").insert({
-      user_id: await ownerId(),
-      actor,
-      action,
-      target_table: targetTable,
-      target_id: targetId,
-      detail,
-    });
-    if (error) console.warn("[audit] skipped:", error.message);
+    // Resolve request-scoped values now; the deferred callback only does I/O.
+    const [supabase, userId] = await Promise.all([db(), ownerId()]);
+    const write = async () => {
+      const { error } = await supabase.from("audit_logs").insert({
+        user_id: userId,
+        actor,
+        action,
+        target_table: targetTable,
+        target_id: targetId,
+        detail,
+      });
+      if (error) console.warn("[audit] skipped:", error.message);
+    };
+    try {
+      after(write);
+    } catch {
+      await write(); // outside a request scope
+    }
   } catch (e) {
     console.warn("[audit] skipped:", e);
   }
