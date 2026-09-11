@@ -10,6 +10,7 @@ const NAV = [
   { href: "/goals", label: "Goals", icon: "M12 22a10 10 0 110-20 10 10 0 010 20zm0-5a5 5 0 100-10 5 5 0 000 10zm0-4a1 1 0 100-2 1 1 0 000 2z" },
   { href: "/scorecard", label: "Weekly Scorecard", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" },
   { href: "/history", label: "History", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
+  { href: "/activity", label: "Activity log", icon: "M4 6h16M4 12h10M4 18h7" },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -66,7 +67,7 @@ function Brand() {
   );
 }
 
-export function Sidebar({ footer }: { footer?: React.ReactNode }) {
+export function Sidebar({ footer }: { footer?: React.ReactNode; signedIn?: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 

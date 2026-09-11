@@ -1,7 +1,7 @@
 import "server-only";
-import type { ScorecardWithEntries, WeeklyScorecard } from "@/types";
+import type { ReviewStatus, ScorecardWithEntries, WeeklyScorecard } from "@/types";
 import { isValidIsoDate, mondayOf } from "@/lib/dates";
-import { check, db, DataError } from "./db";
+import { check, db, DataError, ownerId, scoped } from "./db";
 import { logAudit } from "./audit";
 import { listGoals } from "./goals";
 import { createEntriesForGoals, deleteEntry, listEntries, updateEntries, type EntryUpdate } from "./entries";
@@ -20,13 +20,12 @@ export function averageRating(ratings: number[]): number | null {
   return Math.round(avg * 10) / 10;
 }
 
-/** Newest first. */
-export async function listScorecards(limit = 100): Promise<WeeklyScorecard[]> {
+/** Newest first. Pass `forUser` to read another user's (mentor view; RLS decides access). */
+export async function listScorecards(limit = 100, forUser?: string): Promise<WeeklyScorecard[]> {
   const supabase = await db();
+  const owner = forUser ?? (await ownerId());
   const data = check(
-    await supabase
-      .from("weekly_scorecards")
-      .select("*")
+    await scoped(supabase.from("weekly_scorecards").select("*"), owner)
       .order("week_start_date", { ascending: false })
       .limit(limit),
     "load scorecards",
@@ -35,8 +34,8 @@ export async function listScorecards(limit = 100): Promise<WeeklyScorecard[]> {
 }
 
 /** Newest first, each with its entries + goals. */
-export async function listScorecardsWithEntries(limit = 100): Promise<ScorecardWithEntries[]> {
-  const cards = await listScorecards(limit);
+export async function listScorecardsWithEntries(limit = 100, forUser?: string): Promise<ScorecardWithEntries[]> {
+  const cards = await listScorecards(limit, forUser);
   const entries = await listEntries(cards.map((c) => c.id));
   return cards.map((c) => ({ ...c, entries: entries.filter((e) => e.scorecard_id === c.id) }));
 }
@@ -44,7 +43,7 @@ export async function listScorecardsWithEntries(limit = 100): Promise<ScorecardW
 export async function getScorecard(id: string): Promise<ScorecardWithEntries | null> {
   const supabase = await db();
   const data = check(
-    await supabase.from("weekly_scorecards").select("*").eq("id", id).maybeSingle(),
+    await scoped(supabase.from("weekly_scorecards").select("*").eq("id", id), await ownerId()).maybeSingle(),
     "load scorecard",
   );
   if (!data) return null;
@@ -52,13 +51,16 @@ export async function getScorecard(id: string): Promise<ScorecardWithEntries | n
   return { ...normalize(data as WeeklyScorecard), entries };
 }
 
+async function requireScorecard(id: string): Promise<ScorecardWithEntries> {
+  const card = await getScorecard(id);
+  if (!card) throw new DataError("Scorecard not found.");
+  return card;
+}
+
 export async function getScorecardByWeek(weekStart: string): Promise<ScorecardWithEntries | null> {
   const supabase = await db();
   const data = check(
-    await supabase
-      .from("weekly_scorecards")
-      .select("*")
-      .eq("week_start_date", weekStart)
+    await scoped(supabase.from("weekly_scorecards").select("*").eq("week_start_date", weekStart), await ownerId())
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle(),
@@ -70,12 +72,10 @@ export async function getScorecardByWeek(weekStart: string): Promise<ScorecardWi
 }
 
 /** The most recent scored scorecard before the given week (for trend deltas). */
-export async function getPreviousScoredScorecard(weekStart: string): Promise<WeeklyScorecard | null> {
+export async function getPreviousScoredScorecard(weekStart: string): Promise<ScorecardWithEntries | null> {
   const supabase = await db();
   const data = check(
-    await supabase
-      .from("weekly_scorecards")
-      .select("*")
+    await scoped(supabase.from("weekly_scorecards").select("*"), await ownerId())
       .lt("week_start_date", weekStart)
       .not("overall_score", "is", null)
       .order("week_start_date", { ascending: false })
@@ -83,7 +83,9 @@ export async function getPreviousScoredScorecard(weekStart: string): Promise<Wee
       .maybeSingle(),
     "load previous scorecard",
   );
-  return data ? normalize(data as WeeklyScorecard) : null;
+  if (!data) return null;
+  const entries = await listEntries([data.id]);
+  return { ...normalize(data as WeeklyScorecard), entries };
 }
 
 /**
@@ -103,7 +105,7 @@ export async function startScorecard(date: string): Promise<WeeklyScorecard> {
   const supabase = await db();
   const { data, error } = await supabase
     .from("weekly_scorecards")
-    .insert({ week_start_date: weekStart })
+    .insert({ week_start_date: weekStart, user_id: await ownerId() })
     .select()
     .single();
   if (error) {
@@ -121,8 +123,7 @@ export async function startScorecard(date: string): Promise<WeeklyScorecard> {
 
 /** Adds entries for active goals created after the scorecard was started. */
 export async function addMissingEntries(scorecardId: string): Promise<number> {
-  const card = await getScorecard(scorecardId);
-  if (!card) throw new DataError("Scorecard not found.");
+  const card = await requireScorecard(scorecardId);
   const have = new Set(card.entries.map((e) => e.goal_id));
   const missing = (await listGoals({ activeOnly: true })).filter((g) => !have.has(g.id));
   await createEntriesForGoals(scorecardId, missing);
@@ -136,7 +137,7 @@ export async function computeWeeklyScore(scorecardId: string): Promise<number | 
   const score = averageRating(entries.map((e) => e.progress_rating));
   const supabase = await db();
   check(
-    await supabase.from("weekly_scorecards").update({ overall_score: score }).eq("id", scorecardId),
+    await scoped(supabase.from("weekly_scorecards").update({ overall_score: score }).eq("id", scorecardId), await ownerId()),
     "save overall score",
   );
   await logAudit("scorecard.scored", "weekly_scorecards", scorecardId, { overall_score: score }, "system");
@@ -149,13 +150,16 @@ export async function saveScorecard(
   updates: EntryUpdate[],
   notes: string | null,
 ): Promise<number | null> {
+  const card = await requireScorecard(scorecardId);
+  const valid = new Set(card.entries.map((e) => e.id));
+  if (updates.some((u) => !valid.has(u.id))) throw new DataError("This scorecard changed — refresh and try again.");
   const supabase = await db();
   await updateEntries(scorecardId, updates);
   check(
-    await supabase
-      .from("weekly_scorecards")
-      .update({ notes: notes?.trim() || null })
-      .eq("id", scorecardId),
+    await scoped(
+      supabase.from("weekly_scorecards").update({ notes: notes?.trim() || null }).eq("id", scorecardId),
+      await ownerId(),
+    ),
     "save reflection",
   );
   await logAudit("scorecard.rated", "weekly_scorecards", scorecardId, {
@@ -166,8 +170,7 @@ export async function saveScorecard(
 
 /** Remove one goal from a week's scorecard; re-score if the week was already saved. */
 export async function removeEntry(scorecardId: string, entryId: string): Promise<void> {
-  const card = await getScorecard(scorecardId);
-  if (!card) throw new DataError("Scorecard not found.");
+  const card = await requireScorecard(scorecardId);
   await deleteEntry(scorecardId, entryId);
   await logAudit("scorecard.entry_removed", "scorecard_entries", entryId, { scorecard_id: scorecardId });
   if (card.overall_score != null) await computeWeeklyScore(scorecardId);
@@ -175,6 +178,59 @@ export async function removeEntry(scorecardId: string, entryId: string): Promise
 
 export async function deleteScorecard(id: string): Promise<void> {
   const supabase = await db();
-  check(await supabase.from("weekly_scorecards").delete().eq("id", id), "delete scorecard");
+  check(await scoped(supabase.from("weekly_scorecards").delete().eq("id", id), await ownerId()), "delete scorecard");
   await logAudit("scorecard.deleted", "weekly_scorecards", id);
+}
+
+// ── AI summary (medium risk: always a draft the user reviews) ─────────────
+
+export async function storeSummaryDraft(
+  scorecardId: string,
+  draft: { text: string; source: string; confidence: number },
+): Promise<void> {
+  await requireScorecard(scorecardId);
+  const supabase = await db();
+  check(
+    await scoped(
+      supabase
+        .from("weekly_scorecards")
+        .update({
+          ai_summary: draft.text,
+          ai_summary_source: draft.source,
+          ai_summary_confidence: draft.confidence,
+          ai_summary_review_status: "unreviewed",
+        })
+        .eq("id", scorecardId),
+      await ownerId(),
+    ),
+    "save summary draft",
+  );
+  await logAudit("scorecard.summary_drafted", "weekly_scorecards", scorecardId, {
+    source: draft.source,
+    confidence: draft.confidence,
+  }, "system");
+}
+
+export async function reviewSummary(scorecardId: string, status: Exclude<ReviewStatus, "unreviewed">, editedText?: string) {
+  const card = await requireScorecard(scorecardId);
+  if (!card.ai_summary) throw new DataError("There is no summary draft to review.");
+  const text = editedText?.trim();
+  if (status === "approved" && editedText !== undefined && !text) throw new DataError("The summary can't be empty.");
+  const supabase = await db();
+  check(
+    await scoped(
+      supabase
+        .from("weekly_scorecards")
+        .update({
+          ai_summary_review_status: status,
+          ...(status === "approved" && text ? { ai_summary: text } : {}),
+        })
+        .eq("id", scorecardId),
+      await ownerId(),
+    ),
+    "save review",
+  );
+  await logAudit(`scorecard.summary_${status}`, "weekly_scorecards", scorecardId, {
+    edited: status === "approved" && !!text && text !== card.ai_summary,
+  });
 }

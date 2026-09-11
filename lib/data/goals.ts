@@ -1,7 +1,8 @@
 import "server-only";
 import { CATEGORIES, TIMEFRAMES, type Category, type Goal, type Timeframe } from "@/types";
-import { check, db, DataError } from "./db";
+import { check, db, DataError, ownerId, scoped } from "./db";
 import { logAudit } from "./audit";
+import { getVision } from "./visions";
 
 export type GoalInput = {
   title: string;
@@ -28,33 +29,47 @@ export function validateGoal(input: GoalInput) {
   };
 }
 
-export async function listGoals(opts: { activeOnly?: boolean } = {}): Promise<Goal[]> {
+async function assertOwnVision(visionId: string | null) {
+  if (visionId && !(await getVision(visionId))) throw new DataError("That vision no longer exists.");
+}
+
+/** List goals. Pass `forUser` to read another user's (mentor view; RLS decides access). */
+export async function listGoals(opts: { activeOnly?: boolean; forUser?: string } = {}): Promise<Goal[]> {
   const supabase = await db();
-  let q = supabase.from("goals").select("*").order("created_at", { ascending: true });
+  const owner = opts.forUser ?? (await ownerId());
+  let q = scoped(supabase.from("goals").select("*"), owner);
   if (opts.activeOnly) q = q.eq("is_active", true);
-  const data = check(await q, "load goals");
+  const data = check(await q.order("created_at", { ascending: true }), "load goals");
   return (data ?? []) as Goal[];
 }
 
 export async function getGoal(id: string): Promise<Goal | null> {
   const supabase = await db();
-  const data = check(await supabase.from("goals").select("*").eq("id", id).maybeSingle(), "load goal");
+  const data = check(
+    await scoped(supabase.from("goals").select("*").eq("id", id), await ownerId()).maybeSingle(),
+    "load goal",
+  );
   return (data as Goal) ?? null;
 }
 
 export async function createGoal(input: GoalInput): Promise<Goal> {
   const clean = validateGoal(input);
+  await assertOwnVision(clean.vision_id);
   const supabase = await db();
-  const data = check(await supabase.from("goals").insert(clean).select().single(), "create goal");
+  const data = check(
+    await supabase.from("goals").insert({ ...clean, user_id: await ownerId() }).select().single(),
+    "create goal",
+  );
   await logAudit("goal.created", "goals", data.id, { title: clean.title, category: clean.category });
   return data as Goal;
 }
 
 export async function updateGoal(id: string, input: GoalInput): Promise<Goal> {
   const clean = validateGoal(input);
+  await assertOwnVision(clean.vision_id);
   const supabase = await db();
   const data = check(
-    await supabase.from("goals").update(clean).eq("id", id).select().single(),
+    await scoped(supabase.from("goals").update(clean).eq("id", id), await ownerId()).select().single(),
     "update goal",
   );
   await logAudit("goal.updated", "goals", id, { title: clean.title });
@@ -63,13 +78,16 @@ export async function updateGoal(id: string, input: GoalInput): Promise<Goal> {
 
 export async function setGoalActive(id: string, isActive: boolean): Promise<void> {
   const supabase = await db();
-  check(await supabase.from("goals").update({ is_active: isActive }).eq("id", id), "update goal");
+  check(
+    await scoped(supabase.from("goals").update({ is_active: isActive }).eq("id", id), await ownerId()),
+    "update goal",
+  );
   await logAudit(isActive ? "goal.activated" : "goal.deactivated", "goals", id);
 }
 
 /** Deleting a goal also removes its scorecard entries (FK cascade). */
 export async function deleteGoal(id: string): Promise<void> {
   const supabase = await db();
-  check(await supabase.from("goals").delete().eq("id", id), "delete goal");
+  check(await scoped(supabase.from("goals").delete().eq("id", id), await ownerId()), "delete goal");
   await logAudit("goal.deleted", "goals", id);
 }

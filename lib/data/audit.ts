@@ -1,5 +1,5 @@
 import "server-only";
-import { db } from "./db";
+import { db, ownerId } from "./db";
 
 export type AuditEntry = {
   id: string;
@@ -25,6 +25,7 @@ export async function logAudit(
   try {
     const supabase = await db();
     const { error } = await supabase.from("audit_logs").insert({
+      user_id: await ownerId(),
       actor,
       action,
       target_table: targetTable,
@@ -37,13 +38,17 @@ export async function logAudit(
   }
 }
 
-export async function listAudit(limit = 50): Promise<AuditEntry[]> {
+/** Returns null when the audit_logs table doesn't exist yet (migration 0002 not applied). */
+export async function listAudit(limit = 100): Promise<AuditEntry[] | null> {
   const supabase = await db();
-  const { data, error } = await supabase
-    .from("audit_logs")
-    .select("*")
+  const owner = await ownerId();
+  const base = supabase.from("audit_logs").select("*");
+  const { data, error } = await (owner ? base.eq("user_id", owner) : base.is("user_id", null))
     .order("created_at", { ascending: false })
     .limit(limit);
-  if (error) return [];
+  if (error) {
+    console.warn("[audit] list failed:", error.message);
+    return null;
+  }
   return (data ?? []) as AuditEntry[];
 }

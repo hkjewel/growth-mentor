@@ -5,6 +5,7 @@ import { useActionState, useMemo, useRef, useState, useTransition } from "react"
 import { addMissingEntriesAction, removeEntryAction, saveScorecardAction } from "@/app/actions";
 import type { ScorecardWithEntries } from "@/types";
 import { ActionButton } from "./FormBits";
+import { SummaryPanel } from "./SummaryPanel";
 import { CategoryBadge, ScoreRing } from "./ui";
 
 const RATING_HINTS: Record<number, string> = {
@@ -64,12 +65,15 @@ function RatingPicker({
 export function ScorecardForm({
   card,
   missingGoals,
+  aiEnabled,
 }: {
   card: ScorecardWithEntries;
   missingGoals: number;
+  aiEnabled: boolean;
 }) {
   const [state, action, pending] = useActionState(saveScorecardAction, null);
   const formRef = useRef<HTMLFormElement>(null);
+  const reflectionRef = useRef<HTMLTextAreaElement>(null);
   const saved = card.overall_score != null;
 
   // Unsaved weeks start unrated so the user has to consciously pick each score.
@@ -89,8 +93,12 @@ export function ScorecardForm({
   const preview = rated.length ? Math.round((rated.reduce((a, b) => a + b, 0) / rated.length) * 10) / 10 : null;
   const complete = rated.length === card.entries.length;
   const dirty = useMemo(
-    () => card.entries.some((e) => (ratings[e.id] ?? null) !== (saved ? e.progress_rating : null)),
-    [ratings, card.entries, saved],
+    () =>
+      reflection !== (card.notes ?? "") ||
+      card.entries.some(
+        (e) => (ratings[e.id] ?? null) !== (saved ? e.progress_rating : null) || (notes[e.id] ?? "") !== (e.note ?? ""),
+      ),
+    [ratings, notes, reflection, card.entries, card.notes, saved],
   );
 
   // Submit manually (not via <form action>) so React doesn't auto-reset the
@@ -201,6 +209,7 @@ export function ScorecardForm({
             Weekly reflection
           </label>
           <textarea
+            ref={reflectionRef}
             id="notes"
             name="notes"
             rows={3}
@@ -250,6 +259,18 @@ export function ScorecardForm({
               </p>
             )}
           </div>
+        </div>
+        <div className="mt-4">
+          <SummaryPanel
+            card={card}
+            saved={saved}
+            aiEnabled={aiEnabled}
+            onUseAsReflection={(text) => {
+              setReflection(text);
+              reflectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+              reflectionRef.current?.focus();
+            }}
+          />
         </div>
       </aside>
     </form>

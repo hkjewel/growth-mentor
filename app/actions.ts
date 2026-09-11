@@ -9,11 +9,17 @@ import { createGoal, deleteGoal, setGoalActive, updateGoal } from "@/lib/data/go
 import {
   addMissingEntries,
   deleteScorecard,
+  getPreviousScoredScorecard,
+  getScorecard,
   removeEntry,
+  reviewSummary,
   saveScorecard,
   startScorecard,
+  storeSummaryDraft,
 } from "@/lib/data/scorecards";
 import { validateRating } from "@/lib/data/entries";
+import { listVisions } from "@/lib/data/visions";
+import { draftWeeklySummary } from "@/lib/ai/summaries";
 import { currentWeek } from "@/lib/week";
 
 function str(form: FormData, key: string): string {
@@ -153,6 +159,40 @@ export async function removeEntryAction(scorecardId: string, entryId: string): P
     await removeEntry(scorecardId, entryId);
     refresh();
     return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// ── AI weekly summary (draft → user review) ─────────────────────────────────
+
+export async function draftSummaryAction(scorecardId: string): Promise<ActionResult> {
+  try {
+    const card = await getScorecard(scorecardId);
+    if (!card) throw new DataError("Scorecard not found.");
+    if (card.overall_score == null) throw new DataError("Save your ratings first, then draft a summary.");
+    const [previous, visions] = await Promise.all([
+      getPreviousScoredScorecard(card.week_start_date),
+      listVisions(),
+    ]);
+    const draft = await draftWeeklySummary({ card, previous, visions });
+    await storeSummaryDraft(scorecardId, draft);
+    refresh();
+    return { ok: true, message: "Draft ready — review it below." };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function reviewSummaryAction(
+  scorecardId: string,
+  status: "approved" | "rejected",
+  editedText?: string,
+): Promise<ActionResult> {
+  try {
+    await reviewSummary(scorecardId, status, editedText);
+    refresh();
+    return { ok: true, message: status === "approved" ? "Summary approved." : "Summary rejected." };
   } catch (e) {
     return fail(e);
   }

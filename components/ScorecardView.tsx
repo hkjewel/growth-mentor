@@ -8,6 +8,7 @@ import { ActionButton } from "./FormBits";
 import { ScorecardForm } from "./ScorecardForm";
 import { PageHeader, TrendBadge } from "./ui";
 import { trendOf } from "@/lib/insights";
+import { aiEnabled } from "@/lib/ai/summaries";
 
 /** Full editor for one week's scorecard (used by /scorecard and /scorecard/[id]). */
 export async function ScorecardView({ card, isCurrent }: { card: ScorecardWithEntries; isCurrent: boolean }) {
@@ -47,7 +48,7 @@ export async function ScorecardView({ card, isCurrent }: { card: ScorecardWithEn
           </>
         }
       />
-      <ScorecardForm key={card.id} card={card} missingGoals={missing} />
+      <ScorecardForm key={card.id} card={card} missingGoals={missing} aiEnabled={aiEnabled()} />
     </>
   );
 }
